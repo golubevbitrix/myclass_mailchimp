@@ -12,10 +12,8 @@ from dotenv import load_dotenv
 from flask import Flask, request
 
 load_dotenv()
-
+redis_url = os.getenv("REDIS_URL")
 app = Flask(__name__)
-
-
 
 MAILCHIMP_API_KEY = os.getenv('MAILCHIMP_API_KEY')
 MOY_KLASS_API_KEY = os.getenv('MOY_KLASS_API_KEY')
@@ -40,31 +38,25 @@ SUBSCRIPTIONS_WITH_11900 = [170376, 180100]
 ONLINE_SUBSCRIPTION_IDS = [187447, 180100, 170376, 180098, 148959, 180099,
                            148960]
 
-
 def get_saved_token():
+    r = redis.Redis.from_url(redis_url)
     try:
-        with open([file_path, 'r') as token_file:
-            data = json.load(token_file)
-            if 'access_token' in data and 'expires_at' in data:
-                expires_at = datetime.datetime.fromtimestamp(
-                    data['expires_at'])
-                if expires_at > datetime.datetime.now():
-                    return data['access_token']
-            print('Saved token has expired or is invalid.')
+        data = r.hgetall('token')
+        if 'access_token' in data and 'expires_at' in data:
+            expires_at = datetime.datetime.fromtimestamp(data['expires_at'])
+            if expires_at > datetime.datetime.now():
+                return data['access_token']
+                print('Saved token has expired or is invalid.')
     except FileNotFoundError:
         print('Token file not found, requesting new token.')
     except (json.JSONDecodeError, KeyError) as e:
         print(f"Error reading token file: {str(e)}")
     return None
 
-
 def save_token(token, expires_at):
     r = redis.Redis.from_url(redis_url)
-    with open(token_file_path, 'w') as token_file:
-        json.dump({'access_token': token, 'expires_at': expires_at},
-                  token_file)
+    r.hset('token', mapping = {'access_token': token, 'expires_at': expires_at})
     print("Token saved successfully.")
-
 
 def get_token():
     saved_token = get_saved_token()
@@ -90,14 +82,12 @@ def get_token():
             f"Failed to obtain token from Moy Klass: {response.text}")
     return None
 
-
 def validate_email(email, name):
     if not email:
         print(
             f"Email is missing for student {name}. Cannot proceed with Mailchimp update.")
         return False
     return True
-
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
@@ -203,7 +193,6 @@ def webhook():
         print(f"No tags to update for user {user_id}")
         return 'OK: No tags to update', 200
 
-
 def get_user_info(token, user_id):
     url = f'{MOY_KLASS_URL}/company/users/{user_id}'
     headers = {'x-access-token': token}
@@ -214,7 +203,6 @@ def get_user_info(token, user_id):
         return response.json()
     print(f"Failed to get student info: {response.text}")
     return None
-
 
 def get_user_subscription_info(token, user_id):
     url = f'{MOY_KLASS_URL}/company/userSubscriptions?userId={user_id}'
@@ -228,13 +216,11 @@ def get_user_subscription_info(token, user_id):
     print(f"Failed to get subscription info: {response.text}")
     return None
 
-
 def get_mailchimp_headers():
     api_key = MAILCHIMP_API_KEY
     encoded_api_key = base64.b64encode(
         f'anystring:{api_key}'.encode('utf-8')).decode('utf-8')
     return {'Authorization': f'Basic {encoded_api_key}'}
-
 
 def add_or_update_contact_in_mailchimp(email, name, phone, list_id, tags):
     if not validate_email(email, name):
@@ -297,7 +283,6 @@ def add_or_update_contact_in_mailchimp(email, name, phone, list_id, tags):
             f"Error checking member existence for {email}: {response.text}")
         return response.text
 
-
 def split_name(name):
     parts = name.strip().split()
     if len(parts) == 0:
@@ -306,7 +291,6 @@ def split_name(name):
         return parts[0], ''
     else:
         return parts[0], ' '.join(parts[1:])
-
 
 def log_mailchimp_response(response, email):
     try:
@@ -320,11 +304,9 @@ def log_mailchimp_response(response, email):
         print(
             f"Failed to log Mailchimp response for {email}: {str(e)}")
 
-
 @app.route("/")
 def home():
     return "Flask is running!", 200
-
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
