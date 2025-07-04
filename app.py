@@ -15,21 +15,7 @@ load_dotenv()
 
 app = Flask(__name__)
 
-log_file_path = '/var/www/myproject/app.log'
-token_file_path = '/var/www/myproject/token.json'
 
-file_handler = RotatingFileHandler(log_file_path, maxBytes=1048576,
-                                   backupCount=10)
-file_handler.setFormatter(
-    logging.Formatter(
-        '%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]'
-    )
-)
-file_handler.setLevel(logging.INFO)
-app.logger.handlers = []
-app.logger.addHandler(file_handler)
-app.logger.setLevel(logging.INFO)
-app.logger.propagate = False
 
 MAILCHIMP_API_KEY = os.getenv('MAILCHIMP_API_KEY')
 MOY_KLASS_API_KEY = os.getenv('MOY_KLASS_API_KEY')
@@ -57,26 +43,27 @@ ONLINE_SUBSCRIPTION_IDS = [187447, 180100, 170376, 180098, 148959, 180099,
 
 def get_saved_token():
     try:
-        with open(token_file_path, 'r') as token_file:
+        with open([file_path, 'r') as token_file:
             data = json.load(token_file)
             if 'access_token' in data and 'expires_at' in data:
                 expires_at = datetime.datetime.fromtimestamp(
                     data['expires_at'])
                 if expires_at > datetime.datetime.now():
                     return data['access_token']
-            app.logger.info('Saved token has expired or is invalid.')
+            print('Saved token has expired or is invalid.')
     except FileNotFoundError:
-        app.logger.info('Token file not found, requesting new token.')
+        print('Token file not found, requesting new token.')
     except (json.JSONDecodeError, KeyError) as e:
-        app.logger.error(f"Error reading token file: {str(e)}")
+        print(f"Error reading token file: {str(e)}")
     return None
 
 
 def save_token(token, expires_at):
+    r = redis.Redis.from_url(redis_url)
     with open(token_file_path, 'w') as token_file:
         json.dump({'access_token': token, 'expires_at': expires_at},
                   token_file)
-    app.logger.info("Token saved successfully.")
+    print("Token saved successfully.")
 
 
 def get_token():
@@ -87,9 +74,9 @@ def get_token():
     url = f'{MOY_KLASS_URL}/company/auth/getToken'
     headers = {'Content-Type': 'application/json'}
     payload = {'apiKey': MOY_KLASS_API_KEY}
-    app.logger.info("Requesting new token")
+    print("Requesting new token")
     response = requests.post(url, json=payload, headers=headers)
-    app.logger.info(
+    print(
         f"Token request status: {response.status_code}, expiresAt: {response.json().get('expiresAt', 'N/A')}")
     if response.status_code == 200:
         new_token = response.json()
@@ -99,14 +86,14 @@ def get_token():
         save_token(token, expires_at)
         return token
     else:
-        app.logger.error(
+        print(
             f"Failed to obtain token from Moy Klass: {response.text}")
     return None
 
 
 def validate_email(email, name):
     if not email:
-        app.logger.error(
+        print(
             f"Email is missing for student {name}. Cannot proceed with Mailchimp update.")
         return False
     return True
@@ -115,28 +102,28 @@ def validate_email(email, name):
 @app.route('/webhook', methods=['POST'])
 def webhook():
     data = request.get_json()
-    app.logger.info(f"Received webhook data: {data}")
+    print(f"Received webhook data: {data}")
 
     if not data:
-        app.logger.error("No JSON data received!")
+        print("No JSON data received!")
         return 'Bad request: No JSON data', 200
 
     user_id = data.get('object', {}).get('userId')
     if not user_id:
-        app.logger.error("User ID not provided in the data.")
+        print("User ID not provided in the data.")
         return 'Bad request: No user ID provided', 200
 
     event_type = data.get('event', 'unknown')
-    app.logger.info(f"Processing event '{event_type}' for user ID: {user_id}")
+    print(f"Processing event '{event_type}' for user ID: {user_id}")
 
     token = get_token()
     if not token:
-        app.logger.error("Failed to obtain token from Moy Klass")
+        print("Failed to obtain token from Moy Klass")
         return 'Bad request: Failed to obtain token', 200
 
     user_info = get_user_info(token, user_id)
     if not user_info:
-        app.logger.error("Failed to obtain student info from Moy Klass")
+        print("Failed to obtain student info from Moy Klass")
         return 'Bad request: Failed to obtain student info', 200
 
     email = user_info.get('email')
@@ -150,10 +137,10 @@ def webhook():
 
     subscription_info = get_user_subscription_info(token, user_id)
     if subscription_info and subscription_info.get('subscriptions'):
-        app.logger.info(
+        print(
             f"Subscription info for user {user_id}: {json.dumps(subscription_info)}")
     else:
-        app.logger.info(
+        print(
             f"No subscription info found or empty for user {user_id}")
 
     tags = []
@@ -161,7 +148,7 @@ def webhook():
     if subscription_info and subscription_info.get('subscriptions'):
         for subscription in subscription_info.get('subscriptions', []):
             if subscription.get('subscriptionId') in SUBSCRIPTIONS_WITH_11900:
-                app.logger.info(
+                print(
                     f"Adding tag '11900' for {email} based on subscription "
                     f"{subscription.get('subscriptionId')}"
                 )
@@ -176,10 +163,10 @@ def webhook():
                 break
 
     if client_state == STATUS_ACTIVE:
-        app.logger.info(f"User {user_id} is active; adding tag 'WS'")
+        print(f"User {user_id} is active; adding tag 'WS'")
         tags.append('WS')
     elif client_state == STATUS_DECLINED:
-        app.logger.info(
+        print(
             f"User {user_id} is declined; adding tag 'GoodBye Series'")
         tags.append('GoodBye Series')
     elif client_state == STATUS_ONLINE:
@@ -191,29 +178,29 @@ def webhook():
                     'visitedCount', 0) == 0
                 for sub in subscription_info.get('subscriptions', [])
             )
-        app.logger.info(
+        print(
             f"User {user_id} online subscription valid: {valid_online_subscription}")
         if valid_online_subscription:
-            app.logger.info(f"Adding tag 'WSO' for user {user_id}")
+            print(f"Adding tag 'WSO' for user {user_id}")
             tags.append('WSO')
         elif valid_class_id:
             group_tag = GROUP_TAGS[valid_class_id]
-            app.logger.info(
+            print(
                 f"Adding group tag '{group_tag}' for user {user_id}")
             tags.append(group_tag)
         else:
-            app.logger.info(
+            print(
                 f"Ignoring online user {user_id} with no valid class ID.")
             return 'OK: No valid class ID provided, request ignored', 200
 
     if tags:
-        app.logger.info(f"Final tags to send for {email}: {tags}")
+        print(f"Final tags to send for {email}: {tags}")
         response_text = add_or_update_contact_in_mailchimp(email, name, phone,
                                                            MAILCHIMP_LIST_NS,
                                                            tags)
         return response_text
     else:
-        app.logger.info(f"No tags to update for user {user_id}")
+        print(f"No tags to update for user {user_id}")
         return 'OK: No tags to update', 200
 
 
@@ -221,11 +208,11 @@ def get_user_info(token, user_id):
     url = f'{MOY_KLASS_URL}/company/users/{user_id}'
     headers = {'x-access-token': token}
     response = requests.get(url, headers=headers)
-    app.logger.info(
+    print(
         f"Student info request status: {response.status_code}, response: {response.text}")
     if response.status_code == 200:
         return response.json()
-    app.logger.error(f"Failed to get student info: {response.text}")
+    print(f"Failed to get student info: {response.text}")
     return None
 
 
@@ -238,7 +225,7 @@ def get_user_subscription_info(token, user_id):
         if not subscriptions.get('subscriptions'):
             return None
         return subscriptions
-    app.logger.error(f"Failed to get subscription info: {response.text}")
+    print(f"Failed to get subscription info: {response.text}")
     return None
 
 
@@ -261,7 +248,7 @@ def add_or_update_contact_in_mailchimp(email, name, phone, list_id, tags):
 
     response = requests.get(member_url, headers=headers)
     if response.status_code == 200:
-        app.logger.info(
+        print(
             f"Contact for {email} exists. Updating contact and tags.")
         if isinstance(tags, str):
             tags = [tags]
@@ -269,7 +256,7 @@ def add_or_update_contact_in_mailchimp(email, name, phone, list_id, tags):
         tag_url = f'{member_url}/tags'
         payload = {'tags': [{'name': tag, 'status': 'active'} for tag in tags]}
         response_tag = requests.post(tag_url, json=payload, headers=headers)
-        app.logger.info(
+        print(
             f"Mailchimp tag update response for {email}: {response_tag.text}")
 
         merge_payload = {
@@ -280,7 +267,7 @@ def add_or_update_contact_in_mailchimp(email, name, phone, list_id, tags):
         log_mailchimp_response(response_update, email)
         return response_update.text
     elif response.status_code == 404:
-        app.logger.info(
+        print(
             f"Contact for {email} not found. Creating new contact.")
 
         create_url = f'https://{datacenter}.api.mailchimp.com/3.0/lists/{list_id}/members'
@@ -294,7 +281,7 @@ def add_or_update_contact_in_mailchimp(email, name, phone, list_id, tags):
                                         headers=headers)
         log_mailchimp_response(response_create, email)
         if response_create.status_code != 200:
-            app.logger.error(
+            print(
                 f"Failed to create contact for {email}: {response_create.text}")
             return response_create.text
         time.sleep(1)
@@ -302,11 +289,11 @@ def add_or_update_contact_in_mailchimp(email, name, phone, list_id, tags):
         tag_url = f'{member_url}/tags'
         payload = {'tags': [{'name': tag, 'status': 'active'} for tag in tags]}
         response_tag = requests.post(tag_url, json=payload, headers=headers)
-        app.logger.info(
+        print(
             f"Added tag '{tags}' for email {email}: {response_tag.text}")
         return response_tag.text
     else:
-        app.logger.error(
+        print(
             f"Error checking member existence for {email}: {response.text}")
         return response.text
 
@@ -327,10 +314,10 @@ def log_mailchimp_response(response, email):
         member_id = response_json.get('id')
         email_address = response_json.get('email_address')
         tags_count = response_json.get('tags_count')
-        app.logger.info(
+        print(
             f"Mailchimp response for {email}: id={member_id}, email={email_address}, tags_count={tags_count}")
     except Exception as e:
-        app.logger.error(
+        print(
             f"Failed to log Mailchimp response for {email}: {str(e)}")
 
 
