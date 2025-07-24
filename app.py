@@ -54,7 +54,7 @@ SUBSCRIPTIONS_WITH_11900 = [170376, 180100]
 ONLINE_SUBSCRIPTION_IDS = [187447, 180100, 170376, 180098, 148959, 180099,
                            148960]
 
-
+# token
 def get_saved_token():
     try:
         with open(token_file_path, 'r') as token_file:
@@ -71,14 +71,14 @@ def get_saved_token():
         app.logger.error(f"Error reading token file: {str(e)}")
     return None
 
-
+# token 
 def save_token(token, expires_at):
     with open(token_file_path, 'w') as token_file:
         json.dump({'access_token': token, 'expires_at': expires_at},
                   token_file)
     app.logger.info("Token saved successfully.")
 
-
+# token
 def get_token():
     saved_token = get_saved_token()
     if saved_token:
@@ -103,7 +103,7 @@ def get_token():
             f"Failed to obtain token from Moy Klass: {response.text}")
     return None
 
-
+# 
 def validate_email(email, name):
     if not email:
         app.logger.error(
@@ -111,32 +111,32 @@ def validate_email(email, name):
         return False
     return True
 
-
+# main function 
 @app.route('/webhook', methods=['POST'])
 def webhook():
     data = request.get_json()
-    app.logger.info(f"Received webhook data: {data}")
+    #app.logger.info(f"Received webhook data: {data}")
 
     if not data:
-        app.logger.error("No JSON data received!")
+        #app.logger.error("No JSON data received!")
         return 'Bad request: No JSON data', 200
 
     user_id = data.get('object', {}).get('userId')
     if not user_id:
-        app.logger.error("User ID not provided in the data.")
+        #app.logger.error("User ID not provided in the data.")
         return 'Bad request: No user ID provided', 200
 
     event_type = data.get('event', 'unknown')
-    app.logger.info(f"Processing event '{event_type}' for user ID: {user_id}")
+    #app.logger.info(f"Processing event '{event_type}' for user ID: {user_id}")
 
     token = get_token()
     if not token:
-        app.logger.error("Failed to obtain token from Moy Klass")
+        #app.logger.error("Failed to obtain token from Moy Klass")
         return 'Bad request: Failed to obtain token', 200
 
     user_info = get_user_info(token, user_id)
     if not user_info:
-        app.logger.error("Failed to obtain student info from Moy Klass")
+        #app.logger.error("Failed to obtain student info from Moy Klass")
         return 'Bad request: Failed to obtain student info', 200
 
     email = user_info.get('email')
@@ -150,21 +150,22 @@ def webhook():
 
     subscription_info = get_user_subscription_info(token, user_id)
     if subscription_info and subscription_info.get('subscriptions'):
-        app.logger.info(
-            f"Subscription info for user {user_id}: {json.dumps(subscription_info)}")
+        #app.logger.info(
+            print(f"Subscription info for user {user_id}: {json.dumps(subscription_info)}")
     else:
-        app.logger.info(
-            f"No subscription info found or empty for user {user_id}")
+        #app.logger.info(
+            print(f"No subscription info found or empty for user {user_id}")
 
     tags = []
 
     if subscription_info and subscription_info.get('subscriptions'):
         for subscription in subscription_info.get('subscriptions', []):
             if subscription.get('subscriptionId') in SUBSCRIPTIONS_WITH_11900:
+                '''
                 app.logger.info(
                     f"Adding tag '11900' for {email} based on subscription "
                     f"{subscription.get('subscriptionId')}"
-                )
+                )'''
                 tags.append('11900')
                 break
 
@@ -176,11 +177,11 @@ def webhook():
                 break
 
     if client_state == STATUS_ACTIVE:
-        app.logger.info(f"User {user_id} is active; adding tag 'WS'")
+        #app.logger.info(f"User {user_id} is active; adding tag 'WS'")
         tags.append('WS')
     elif client_state == STATUS_DECLINED:
-        app.logger.info(
-            f"User {user_id} is declined; adding tag 'GoodBye Series'")
+        #app.logger.info(
+            print(f"User {user_id} is declined; adding tag 'GoodBye Series'")
         tags.append('GoodBye Series')
     elif client_state == STATUS_ONLINE:
         valid_online_subscription = False
@@ -191,23 +192,23 @@ def webhook():
                     'visitedCount', 0) == 0
                 for sub in subscription_info.get('subscriptions', [])
             )
-        app.logger.info(
-            f"User {user_id} online subscription valid: {valid_online_subscription}")
+        #app.logger.info(
+        print(f"User {user_id} online subscription valid: {valid_online_subscription}")
         if valid_online_subscription:
-            app.logger.info(f"Adding tag 'WSO' for user {user_id}")
+            #app.logger.info(f"Adding tag 'WSO' for user {user_id}")
             tags.append('WSO')
         elif valid_class_id:
             group_tag = GROUP_TAGS[valid_class_id]
-            app.logger.info(
-                f"Adding group tag '{group_tag}' for user {user_id}")
+            #app.logger.info(
+                #f"Adding group tag '{group_tag}' for user {user_id}")
             tags.append(group_tag)
         else:
-            app.logger.info(
-                f"Ignoring online user {user_id} with no valid class ID.")
+            #app.logger.info(
+                #f"Ignoring online user {user_id} with no valid class ID.")
             return 'OK: No valid class ID provided, request ignored', 200
 
     if tags:
-        app.logger.info(f"Final tags to send for {email}: {tags}")
+        #app.logger.info(f"Final tags to send for {email}: {tags}")
         response_text = add_or_update_contact_in_mailchimp(email, name, phone,
                                                            MAILCHIMP_LIST_NS,
                                                            tags)
