@@ -123,6 +123,8 @@ def webhook():
     email = user_info.get('email')
     name = user_info.get('name')
     phone = user_info.get('phone')
+    filials = user_info.get('filials')
+    print(filials)
 
     if not validate_email(email, name):
         return 'OK: No email, request ignored', 200
@@ -156,14 +158,16 @@ def webhook():
                 valid_class_id = join.get('classId')
                 break
 
-    if client_state == STATUS_ACTIVE:
-        print(f"User {user_id} is active; adding tag 'WS'")
-        tags.append('WS')
-    elif client_state == STATUS_DECLINED:
+    if client_state == STATUS_DECLINED:
         print(
             f"User {user_id} is declined; adding tag 'GoodBye Series'")
         tags.append('GoodBye Series')
-    elif client_state == STATUS_ONLINE:
+    else:
+      if 47769 in filials:
+        print(f"User {user_id} is active; adding tag 'WS'")
+        tags.append('WS')
+    
+      if 32307 in filials or 43572 in filials:
         valid_online_subscription = False
         if subscription_info and subscription_info.get('subscriptions'):
             valid_online_subscription = any(
