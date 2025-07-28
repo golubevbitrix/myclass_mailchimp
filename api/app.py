@@ -18,8 +18,9 @@ app = Flask(__name__)
 
 load_dotenv(dotenv_path=".env.local")
 redis_url = os.getenv("REDIS_URL")
-load_dotenv(dotenv_path=".env")
 MAILCHIMP_API_KEY = os.getenv('MAILCHIMP_API_KEY')
+
+load_dotenv(dotenv_path=".env")
 MOY_KLASS_API_KEY = os.getenv('MOY_KLASS_API_KEY')
 MOY_KLASS_URL = os.getenv('MOY_KLASS_URL', 'https://api.moyklass.com/v1')
 
