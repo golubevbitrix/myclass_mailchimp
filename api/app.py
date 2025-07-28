@@ -164,11 +164,12 @@ def webhook():
             f"User {user_id} is declined; adding tag 'GoodBye Series'")
         tags.append('GoodBye Series')
     else:
-      if 47769 in filials:
+      if 32307 in filials or 43572 in filials:
+      
         print(f"User {user_id} is active; adding tag 'WS'")
         tags.append('WS')
     
-      if 32307 in filials or 43572 in filials:
+      if 47769 in filials:
         valid_online_subscription = False
         if subscription_info and subscription_info.get('subscriptions'):
             valid_online_subscription = any(
